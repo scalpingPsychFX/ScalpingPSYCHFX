@@ -1,0 +1,293 @@
+{
+  "entities": {
+    "GoldAnalysis": {
+      "title": "GoldAnalysis",
+      "description": "Full XAUUSD gold market analysis post with trade strategy notes authored by the admin.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "date": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$", "minLength": 10, "maxLength": 10 },
+        "pair": { "type": "string", "minLength": 1, "maxLength": 24 },
+        "bias": { "type": "string", "enum": ["Bullish", "Bearish", "Neutral"] },
+        "timeframe": { "type": "string", "minLength": 1, "maxLength": 40 },
+        "entryZone": { "type": "string", "maxLength": 120 },
+        "invalidation": { "type": "string", "maxLength": 120 },
+        "targets": { "type": "string", "maxLength": 160 },
+        "strategyNotes": { "type": "string", "minLength": 1, "maxLength": 15000 },
+        "visibility": { "type": "string", "enum": ["members"] },
+        "authorUid": { "type": "string", "pattern": "^[a-zA-Z0-9_\\-]+$", "minLength": 1, "maxLength": 128 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["title", "date", "pair", "bias", "timeframe", "strategyNotes", "visibility", "authorUid", "createdAt", "updatedAt"]
+    },
+    "StrategyUpdate": {
+      "title": "StrategyUpdate",
+      "description": "Community strategy update, playbook refinement, or risk rule update.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "date": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$", "minLength": 10, "maxLength": 10 },
+        "category": { "type": "string", "enum": ["Execution Rule", "Risk Management", "Session Playbook", "Market Regime"] },
+        "summary": { "type": "string", "minLength": 1, "maxLength": 500 },
+        "details": { "type": "string", "minLength": 1, "maxLength": 12000 },
+        "visibility": { "type": "string", "enum": ["members"] },
+        "authorUid": { "type": "string", "pattern": "^[a-zA-Z0-9_\\-]+$", "minLength": 1, "maxLength": 128 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["title", "date", "category", "summary", "details", "visibility", "authorUid", "createdAt", "updatedAt"]
+    },
+    "Meeting": {
+      "title": "Meeting",
+      "description": "Group meeting schedule item or historical meeting recap.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "date": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$", "minLength": 10, "maxLength": 10 },
+        "time": { "type": "string", "minLength": 1, "maxLength": 60 },
+        "link": { "type": "string", "maxLength": 500 },
+        "status": { "type": "string", "enum": ["upcoming", "completed"] },
+        "agendaOrRecap": { "type": "string", "maxLength": 8000 },
+        "recordingLink": { "type": "string", "maxLength": 500 },
+        "visibility": { "type": "string", "enum": ["members"] },
+        "authorUid": { "type": "string", "pattern": "^[a-zA-Z0-9_\\-]+$", "minLength": 1, "maxLength": 128 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["title", "date", "time", "link", "status", "agendaOrRecap", "visibility", "authorUid", "createdAt", "updatedAt"]
+    },
+    "Announcement": {
+      "title": "Announcement",
+      "description": "Community announcement published by the admin.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "date": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$", "minLength": 10, "maxLength": 10 },
+        "priority": { "type": "string", "enum": ["Normal", "Important", "Urgent"] },
+        "body": { "type": "string", "minLength": 1, "maxLength": 8000 },
+        "pinned": { "type": "boolean" },
+        "visibility": { "type": "string", "enum": ["members"] },
+        "authorUid": { "type": "string", "pattern": "^[a-zA-Z0-9_\\-]+$", "minLength": 1, "maxLength": 128 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["title", "date", "priority", "body", "pinned", "visibility", "authorUid", "createdAt", "updatedAt"]
+    },
+    "PortalNote": {
+      "title": "PortalNote",
+      "description": "Admin important notes and trader personal details displayed on the portal.",
+      "type": "object",
+      "properties": {
+        "noteType": { "type": "string", "enum": ["profile", "important_note"] },
+        "title": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "date": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$", "minLength": 10, "maxLength": 10 },
+        "content": { "type": "string", "minLength": 1, "maxLength": 10000 },
+        "traderName": { "type": "string", "maxLength": 120 },
+        "tradingStyle": { "type": "string", "maxLength": 160 },
+        "activeSessions": { "type": "string", "maxLength": 160 },
+        "contactChannel": { "type": "string", "maxLength": 200 },
+        "riskRules": { "type": "string", "maxLength": 2000 },
+        "visibility": { "type": "string", "enum": ["members"] },
+        "authorUid": { "type": "string", "pattern": "^[a-zA-Z0-9_\\-]+$", "minLength": 1, "maxLength": 128 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["noteType", "title", "date", "content", "visibility", "authorUid", "createdAt", "updatedAt"]
+    },
+    "PaidStrategy": {
+      "title": "PaidStrategy",
+      "description": "Public metadata for a paid strategy (title, description, price in INR) without exposing the hidden file URL.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "description": { "type": "string", "minLength": 1, "maxLength": 2000 },
+        "priceInr": { "type": "number" },
+        "fileName": { "type": "string", "minLength": 1, "maxLength": 260 },
+        "fileType": { "type": "string", "enum": ["pdf", "image"] },
+        "date": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$", "minLength": 10, "maxLength": 10 },
+        "visibility": { "type": "string", "enum": ["members"] },
+        "authorUid": { "type": "string", "pattern": "^[a-zA-Z0-9_\\-]+$", "minLength": 1, "maxLength": 128 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["title", "description", "priceInr", "fileName", "fileType", "date", "visibility", "authorUid", "createdAt", "updatedAt"]
+    },
+    "PaidStrategyFile": {
+      "title": "PaidStrategyFile",
+      "description": "Admin-only protected storage reference for a paid strategy file.",
+      "type": "object",
+      "properties": {
+        "strategyId": { "type": "string", "pattern": "^[a-zA-Z0-9_\\-]+$", "minLength": 1, "maxLength": 128 },
+        "fileUrl": { "type": "string", "minLength": 1, "maxLength": 2000 },
+        "storagePath": { "type": "string", "minLength": 1, "maxLength": 500 },
+        "fileName": { "type": "string", "minLength": 1, "maxLength": 260 },
+        "fileType": { "type": "string", "enum": ["pdf", "image"] },
+        "authorUid": { "type": "string", "pattern": "^[a-zA-Z0-9_\\-]+$", "minLength": 1, "maxLength": 128 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["strategyId", "fileUrl", "storagePath", "fileName", "fileType", "authorUid", "createdAt", "updatedAt"]
+    },
+    "PaymentSettings": {
+      "title": "PaymentSettings",
+      "description": "Admin UPI ID and QR code configuration displayed to members during unlock.",
+      "type": "object",
+      "properties": {
+        "upiId": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "payeeName": { "type": "string", "maxLength": 120 },
+        "qrImageUrl": { "type": "string", "maxLength": 2000 },
+        "qrStoragePath": { "type": "string", "maxLength": 500 },
+        "instructions": { "type": "string", "maxLength": 1000 },
+        "authorUid": { "type": "string", "pattern": "^[a-zA-Z0-9_\\-]+$", "minLength": 1, "maxLength": 128 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["upiId", "qrImageUrl", "authorUid", "createdAt", "updatedAt"]
+    },
+    "PaymentRequest": {
+      "title": "PaymentRequest",
+      "description": "Member UPI payment proof submission for unlocking a paid strategy.",
+      "type": "object",
+      "properties": {
+        "memberUid": { "type": "string", "pattern": "^[a-zA-Z0-9_\\-]+$", "minLength": 1, "maxLength": 128 },
+        "memberName": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "memberEmail": { "type": "string", "minLength": 3, "maxLength": 200 },
+        "strategyId": { "type": "string", "pattern": "^[a-zA-Z0-9_\\-]+$", "minLength": 1, "maxLength": 128 },
+        "strategyTitle": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "priceInr": { "type": "number" },
+        "screenshotUrl": { "type": "string", "minLength": 1, "maxLength": 2000 },
+        "screenshotStoragePath": { "type": "string", "minLength": 1, "maxLength": 500 },
+        "transactionId": { "type": "string", "maxLength": 120 },
+        "status": { "type": "string", "enum": ["pending", "approved", "rejected"] },
+        "adminNote": { "type": "string", "maxLength": 500 },
+        "date": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$", "minLength": 10, "maxLength": 10 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["memberUid", "memberName", "memberEmail", "strategyId", "strategyTitle", "priceInr", "screenshotUrl", "screenshotStoragePath", "status", "date", "createdAt", "updatedAt"]
+    },
+    "StrategyUnlock": {
+      "title": "StrategyUnlock",
+      "description": "Per-member unlock grant issued by admin upon payment approval.",
+      "type": "object",
+      "properties": {
+        "memberUid": { "type": "string", "pattern": "^[a-zA-Z0-9_\\-]+$", "minLength": 1, "maxLength": 128 },
+        "strategyId": { "type": "string", "pattern": "^[a-zA-Z0-9_\\-]+$", "minLength": 1, "maxLength": 128 },
+        "requestId": { "type": "string", "pattern": "^[a-zA-Z0-9_\\-]+$", "minLength": 1, "maxLength": 128 },
+        "fileUrl": { "type": "string", "minLength": 1, "maxLength": 2000 },
+        "fileName": { "type": "string", "minLength": 1, "maxLength": 260 },
+        "fileType": { "type": "string", "enum": ["pdf", "image"] },
+        "grantedBy": { "type": "string", "pattern": "^[a-zA-Z0-9_\\-]+$", "minLength": 1, "maxLength": 128 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["memberUid", "strategyId", "requestId", "fileUrl", "fileName", "fileType", "grantedBy", "createdAt", "updatedAt"]
+    },
+    "PrimaryAdminClaim": {
+      "title": "PrimaryAdminClaim",
+      "description": "Singleton lock recording the first user who signed in as portal admin.",
+      "type": "object",
+      "properties": {
+        "adminUid": { "type": "string", "pattern": "^[a-zA-Z0-9_\\-]+$", "minLength": 1, "maxLength": 128 },
+        "claimedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["adminUid", "claimedAt"]
+    },
+    "AdminRecord": {
+      "title": "AdminRecord",
+      "description": "Role lookup document for legacy UID admins.",
+      "type": "object",
+      "properties": {
+        "role": { "type": "string", "enum": ["admin"] }
+      },
+      "required": ["role"]
+    },
+    "AdminEmail": {
+      "title": "AdminEmail",
+      "description": "Email-based admin authorization entry managed in Admin Settings.",
+      "type": "object",
+      "properties": {
+        "email": {
+          "type": "string",
+          "pattern": "^[a-z0-9._%+\\-]+@[a-z0-9.\\-]+\\.[a-z]{2,}$",
+          "minLength": 3,
+          "maxLength": 200
+        },
+        "status": { "type": "string", "enum": ["active", "revoked"] },
+        "roleLabel": { "type": "string", "maxLength": 80 },
+        "addedByUid": { "type": "string", "pattern": "^[a-zA-Z0-9_\\-]+$", "minLength": 1, "maxLength": 128 },
+        "addedByEmail": { "type": "string", "minLength": 3, "maxLength": 200 },
+        "updatedByUid": { "type": "string", "pattern": "^[a-zA-Z0-9_\\-]+$", "minLength": 1, "maxLength": 128 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["email", "status", "addedByUid", "addedByEmail", "updatedByUid", "createdAt", "updatedAt"]
+    },
+    "AdminRoster": {
+      "title": "AdminRoster",
+      "description": "Singleton counter tracking active admin count to prevent removing the last remaining admin.",
+      "type": "object",
+      "properties": {
+        "activeCount": { "type": "number" },
+        "updatedByUid": { "type": "string", "pattern": "^[a-zA-Z0-9_\\-]+$", "minLength": 1, "maxLength": 128 },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["activeCount", "updatedByUid", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "/gold_analyses/{analysisId}": {
+      "schema": { "$ref": "#/entities/GoldAnalysis" },
+      "description": "XAUUSD gold analysis posts and trade strategy notes."
+    },
+    "/strategy_updates/{updateId}": {
+      "schema": { "$ref": "#/entities/StrategyUpdate" },
+      "description": "Strategy updates and playbook notes."
+    },
+    "/meetings/{meetingId}": {
+      "schema": { "$ref": "#/entities/Meeting" },
+      "description": "Group meeting schedules and historical meeting recaps."
+    },
+    "/announcements/{announcementId}": {
+      "schema": { "$ref": "#/entities/Announcement" },
+      "description": "Community announcements."
+    },
+    "/portal_notes/{noteId}": {
+      "schema": { "$ref": "#/entities/PortalNote" },
+      "description": "Admin important notes and personal trading desk details."
+    },
+    "/paid_strategies/{strategyId}": {
+      "schema": { "$ref": "#/entities/PaidStrategy" },
+      "description": "Public metadata for paid strategies without hidden file URLs."
+    },
+    "/paid_strategy_files/{strategyId}": {
+      "schema": { "$ref": "#/entities/PaidStrategyFile" },
+      "description": "Admin-only storage URLs for paid strategy PDF/image files."
+    },
+    "/payment_settings/{settingId}": {
+      "schema": { "$ref": "#/entities/PaymentSettings" },
+      "description": "Admin UPI ID and QR code settings."
+    },
+    "/payment_requests/{requestId}": {
+      "schema": { "$ref": "#/entities/PaymentRequest" },
+      "description": "Member UPI payment requests and screenshots."
+    },
+    "/strategy_unlocks/{unlockId}": {
+      "schema": { "$ref": "#/entities/StrategyUnlock" },
+      "description": "Per-member unlocked strategy file access grants."
+    },
+    "/portal_config/{configId}": {
+      "schema": { "$ref": "#/entities/PrimaryAdminClaim" },
+      "description": "Singleton admin claim and active admin roster count configuration."
+    },
+    "/admin_emails/{emailId}": {
+      "schema": { "$ref": "#/entities/AdminEmail" },
+      "description": "Email-based admin authorization list managed via Admin Settings."
+    },
+    "/admins/{adminId}": {
+      "schema": { "$ref": "#/entities/AdminRecord" },
+      "description": "Server-managed legacy admin role records."
+    }
+  }
+}

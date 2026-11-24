@@ -1,0 +1,59 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    function isSignedIn() {
+      return request.auth != null && request.auth.token.email_verified == true;
+    }
+
+    function isListedEmailAdmin() {
+      return isSignedIn() &&
+        request.auth.token.email is string &&
+        firestore.exists(/databases/ai-studio-scalpingpsychefx-8c73e7a4-0b34-44e5-89e7-64506e52a838/documents/admin_emails/$(request.auth.token.email.lower())) &&
+        firestore.get(/databases/ai-studio-scalpingpsychefx-8c73e7a4-0b34-44e5-89e7-64506e52a838/documents/admin_emails/$(request.auth.token.email.lower())).data.status == 'active';
+    }
+
+    function isBootstrapBackupAdmin() {
+      return isSignedIn() &&
+        request.auth.token.email is string &&
+        request.auth.token.email.lower() == 'solotravelvip@gmail.com' &&
+        (
+          !firestore.exists(/databases/ai-studio-scalpingpsychefx-8c73e7a4-0b34-44e5-89e7-64506e52a838/documents/admin_emails/$('solotravelvip@gmail.com')) ||
+          firestore.get(/databases/ai-studio-scalpingpsychefx-8c73e7a4-0b34-44e5-89e7-64506e52a838/documents/admin_emails/$('solotravelvip@gmail.com')).data.status == 'active'
+        );
+    }
+
+    function isPrimaryAdmin() {
+      return isSignedIn() &&
+        firestore.exists(/databases/ai-studio-scalpingpsychefx-8c73e7a4-0b34-44e5-89e7-64506e52a838/documents/portal_config/primary_admin) &&
+        firestore.get(/databases/ai-studio-scalpingpsychefx-8c73e7a4-0b34-44e5-89e7-64506e52a838/documents/portal_config/primary_admin).data.adminUid == request.auth.uid &&
+        (
+          !(request.auth.token.email is string) ||
+          !firestore.exists(/databases/ai-studio-scalpingpsychefx-8c73e7a4-0b34-44e5-89e7-64506e52a838/documents/admin_emails/$(request.auth.token.email.lower())) ||
+          firestore.get(/databases/ai-studio-scalpingpsychefx-8c73e7a4-0b34-44e5-89e7-64506e52a838/documents/admin_emails/$(request.auth.token.email.lower())).data.status == 'active'
+        );
+    }
+
+    function isPortalAdmin() {
+      return isListedEmailAdmin() || isPrimaryAdmin() || isBootstrapBackupAdmin();
+    }
+
+    // Paid strategy PDFs & images: only Admins can upload; download URLs are gated via Firestore split collections
+    match /paid_strategies/{strategyId}/{allPaths=**} {
+      allow write: if isPortalAdmin() && request.resource.size <= 25 * 1024 * 1024;
+      allow read: if isSignedIn();
+    }
+
+    // UPI QR code image: only Admins can upload; members can view
+    match /payment_settings/{allPaths=**} {
+      allow write: if isPortalAdmin() && request.resource.size <= 5 * 1024 * 1024;
+      allow read: if isSignedIn();
+    }
+
+    // Payment screenshots: members can upload only under their own UID folder; only that member or Admins can read
+    match /payment_screenshots/{memberUid}/{allPaths=**} {
+      allow write: if isSignedIn() && request.auth.uid == memberUid && request.resource.size <= 10 * 1024 * 1024;
+      allow read: if isSignedIn() && (request.auth.uid == memberUid || isPortalAdmin());
+    }
+  }
+}

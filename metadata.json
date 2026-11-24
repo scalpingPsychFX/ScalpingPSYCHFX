@@ -1,0 +1,8 @@
+{
+  "name": "SCALPING PSYCHE FX",
+  "description": "Forex community portal for XAUUSD gold analysis, strategy updates, group meeting schedules, announcements, and trading desk notes.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

@@ -1,0 +1,607 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global safety net: default-deny catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Global Helpers ---
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerifiedMember() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isValidEmailId(id) {
+      return id is string && id.size() >= 3 && id.size() <= 200 &&
+        !id.matches('.*\\.\\..*') &&
+        id.matches('^[a-z0-9._%+\\-]+@[a-z0-9.\\-]+\\.[a-z]{2,}$');
+    }
+
+    function isDateString(value) {
+      return value is string && value.size() == 10 && value.matches('^\\d{4}-\\d{2}-\\d{2}$');
+    }
+
+    function isListedEmailAdmin() {
+      return isVerifiedMember() &&
+        request.auth.token.email is string &&
+        exists(/databases/$(database)/documents/admin_emails/$(request.auth.token.email.lower())) &&
+        get(/databases/$(database)/documents/admin_emails/$(request.auth.token.email.lower())).data.status == 'active';
+    }
+
+    function isBootstrapBackupEmail() {
+      return isVerifiedMember() &&
+        request.auth.token.email is string &&
+        request.auth.token.email.lower() == 'solotravelvip@gmail.com' &&
+        (
+          !exists(/databases/$(database)/documents/admin_emails/$('solotravelvip@gmail.com')) ||
+          get(/databases/$(database)/documents/admin_emails/$('solotravelvip@gmail.com')).data.status == 'active'
+        );
+    }
+
+    function isPrimaryClaimedAdmin() {
+      return isVerifiedMember() &&
+        exists(/databases/$(database)/documents/portal_config/primary_admin) &&
+        get(/databases/$(database)/documents/portal_config/primary_admin).data.adminUid == request.auth.uid &&
+        (
+          !(request.auth.token.email is string) ||
+          !exists(/databases/$(database)/documents/admin_emails/$(request.auth.token.email.lower())) ||
+          get(/databases/$(database)/documents/admin_emails/$(request.auth.token.email.lower())).data.status == 'active'
+        );
+    }
+
+    function isLegacyUidAdmin() {
+      return isVerifiedMember() &&
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+    }
+
+    function isAdmin() {
+      return isListedEmailAdmin() || isPrimaryClaimedAdmin() || isBootstrapBackupEmail() || isLegacyUidAdmin();
+    }
+
+    // --- Validation Blueprints ---
+    function isValidPrimaryAdminClaim(data) {
+      return data.keys().hasAll(['adminUid', 'claimedAt']) &&
+        data.keys().hasOnly(['adminUid', 'claimedAt']) &&
+        isValidId(data.adminUid) && data.adminUid == request.auth.uid &&
+        data.claimedAt is timestamp;
+    }
+
+    function isValidAdminRoster(data) {
+      return data.keys().hasAll(['activeCount', 'updatedByUid', 'updatedAt']) &&
+        data.keys().hasOnly(['activeCount', 'updatedByUid', 'updatedAt']) &&
+        data.activeCount is int && data.activeCount >= 1 && data.activeCount <= 100 &&
+        isValidId(data.updatedByUid) && data.updatedByUid == request.auth.uid &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidAdminEmailDoc(data) {
+      return data.keys().hasAll([
+        'email', 'status', 'addedByUid', 'addedByEmail', 'updatedByUid', 'createdAt', 'updatedAt'
+      ]) &&
+      data.keys().hasOnly([
+        'email', 'status', 'roleLabel', 'addedByUid', 'addedByEmail', 'updatedByUid', 'createdAt', 'updatedAt'
+      ]) &&
+      isValidEmailId(data.email) &&
+      data.status in ['active', 'revoked'] &&
+      (!('roleLabel' in data) || (data.roleLabel is string && data.roleLabel.size() <= 80)) &&
+      isValidId(data.addedByUid) &&
+      data.addedByEmail is string && data.addedByEmail.size() >= 3 && data.addedByEmail.size() <= 200 &&
+      isValidId(data.updatedByUid) && data.updatedByUid == request.auth.uid &&
+      data.createdAt is timestamp &&
+      data.updatedAt is timestamp;
+    }
+
+    function isValidGoldAnalysis(data) {
+      return data.keys().hasAll([
+        'title', 'date', 'pair', 'bias', 'timeframe',
+        'strategyNotes', 'visibility', 'authorUid', 'createdAt', 'updatedAt'
+      ]) &&
+      data.keys().hasOnly([
+        'title', 'date', 'pair', 'bias', 'timeframe',
+        'entryZone', 'invalidation', 'targets',
+        'strategyNotes', 'visibility', 'authorUid', 'createdAt', 'updatedAt'
+      ]) &&
+      data.title is string && data.title.size() >= 1 && data.title.size() <= 200 &&
+      isDateString(data.date) &&
+      data.pair is string && data.pair.size() >= 1 && data.pair.size() <= 24 &&
+      data.bias in ['Bullish', 'Bearish', 'Neutral'] &&
+      data.timeframe is string && data.timeframe.size() >= 1 && data.timeframe.size() <= 40 &&
+      (!('entryZone' in data) || (data.entryZone is string && data.entryZone.size() <= 120)) &&
+      (!('invalidation' in data) || (data.invalidation is string && data.invalidation.size() <= 120)) &&
+      (!('targets' in data) || (data.targets is string && data.targets.size() <= 160)) &&
+      data.strategyNotes is string && data.strategyNotes.size() >= 1 && data.strategyNotes.size() <= 15000 &&
+      data.visibility == 'members' &&
+      isValidId(data.authorUid) && data.authorUid == request.auth.uid &&
+      data.createdAt is timestamp &&
+      data.updatedAt is timestamp;
+    }
+
+    function isValidStrategyUpdate(data) {
+      return data.keys().hasAll([
+        'title', 'date', 'category', 'summary', 'details',
+        'visibility', 'authorUid', 'createdAt', 'updatedAt'
+      ]) &&
+      data.keys().hasOnly([
+        'title', 'date', 'category', 'summary', 'details',
+        'visibility', 'authorUid', 'createdAt', 'updatedAt'
+      ]) &&
+      data.title is string && data.title.size() >= 1 && data.title.size() <= 200 &&
+      isDateString(data.date) &&
+      data.category in ['Execution Rule', 'Risk Management', 'Session Playbook', 'Market Regime'] &&
+      data.summary is string && data.summary.size() >= 1 && data.summary.size() <= 500 &&
+      data.details is string && data.details.size() >= 1 && data.details.size() <= 12000 &&
+      data.visibility == 'members' &&
+      isValidId(data.authorUid) && data.authorUid == request.auth.uid &&
+      data.createdAt is timestamp &&
+      data.updatedAt is timestamp;
+    }
+
+    function isValidMeeting(data) {
+      return data.keys().hasAll([
+        'title', 'date', 'time', 'link', 'status', 'agendaOrRecap',
+        'visibility', 'authorUid', 'createdAt', 'updatedAt'
+      ]) &&
+      data.keys().hasOnly([
+        'title', 'date', 'time', 'link', 'status', 'agendaOrRecap',
+        'recordingLink', 'visibility', 'authorUid', 'createdAt', 'updatedAt'
+      ]) &&
+      data.title is string && data.title.size() >= 1 && data.title.size() <= 200 &&
+      isDateString(data.date) &&
+      data.time is string && data.time.size() >= 1 && data.time.size() <= 60 &&
+      data.link is string && data.link.size() <= 500 &&
+      data.status in ['upcoming', 'completed'] &&
+      data.agendaOrRecap is string && data.agendaOrRecap.size() <= 8000 &&
+      (!('recordingLink' in data) || (data.recordingLink is string && data.recordingLink.size() <= 500)) &&
+      data.visibility == 'members' &&
+      isValidId(data.authorUid) && data.authorUid == request.auth.uid &&
+      data.createdAt is timestamp &&
+      data.updatedAt is timestamp;
+    }
+
+    function isValidAnnouncement(data) {
+      return data.keys().hasAll([
+        'title', 'date', 'priority', 'body', 'pinned',
+        'visibility', 'authorUid', 'createdAt', 'updatedAt'
+      ]) &&
+      data.keys().hasOnly([
+        'title', 'date', 'priority', 'body', 'pinned',
+        'visibility', 'authorUid', 'createdAt', 'updatedAt'
+      ]) &&
+      data.title is string && data.title.size() >= 1 && data.title.size() <= 200 &&
+      isDateString(data.date) &&
+      data.priority in ['Normal', 'Important', 'Urgent'] &&
+      data.body is string && data.body.size() >= 1 && data.body.size() <= 8000 &&
+      data.pinned is bool &&
+      data.visibility == 'members' &&
+      isValidId(data.authorUid) && data.authorUid == request.auth.uid &&
+      data.createdAt is timestamp &&
+      data.updatedAt is timestamp;
+    }
+
+    function isValidPortalNote(data) {
+      return data.keys().hasAll([
+        'noteType', 'title', 'date', 'content',
+        'visibility', 'authorUid', 'createdAt', 'updatedAt'
+      ]) &&
+      data.keys().hasOnly([
+        'noteType', 'title', 'date', 'content',
+        'traderName', 'tradingStyle', 'activeSessions', 'contactChannel', 'riskRules',
+        'visibility', 'authorUid', 'createdAt', 'updatedAt'
+      ]) &&
+      data.noteType in ['profile', 'important_note'] &&
+      data.title is string && data.title.size() >= 1 && data.title.size() <= 200 &&
+      isDateString(data.date) &&
+      data.content is string && data.content.size() >= 1 && data.content.size() <= 10000 &&
+      (!('traderName' in data) || (data.traderName is string && data.traderName.size() <= 120)) &&
+      (!('tradingStyle' in data) || (data.tradingStyle is string && data.tradingStyle.size() <= 160)) &&
+      (!('activeSessions' in data) || (data.activeSessions is string && data.activeSessions.size() <= 160)) &&
+      (!('contactChannel' in data) || (data.contactChannel is string && data.contactChannel.size() <= 200)) &&
+      (!('riskRules' in data) || (data.riskRules is string && data.riskRules.size() <= 2000)) &&
+      data.visibility == 'members' &&
+      isValidId(data.authorUid) && data.authorUid == request.auth.uid &&
+      data.createdAt is timestamp &&
+      data.updatedAt is timestamp;
+    }
+
+    function isValidPaidStrategy(data) {
+      return data.keys().hasAll([
+        'title', 'description', 'priceInr', 'fileName', 'fileType',
+        'date', 'visibility', 'authorUid', 'createdAt', 'updatedAt'
+      ]) &&
+      data.keys().hasOnly([
+        'title', 'description', 'priceInr', 'fileName', 'fileType',
+        'date', 'visibility', 'authorUid', 'createdAt', 'updatedAt'
+      ]) &&
+      data.title is string && data.title.size() >= 1 && data.title.size() <= 200 &&
+      data.description is string && data.description.size() >= 1 && data.description.size() <= 2000 &&
+      (data.priceInr is int || data.priceInr is float) && data.priceInr >= 0 && data.priceInr <= 10000000 &&
+      data.fileName is string && data.fileName.size() >= 1 && data.fileName.size() <= 260 &&
+      data.fileType in ['pdf', 'image'] &&
+      isDateString(data.date) &&
+      data.visibility == 'members' &&
+      isValidId(data.authorUid) && data.authorUid == request.auth.uid &&
+      data.createdAt is timestamp &&
+      data.updatedAt is timestamp;
+    }
+
+    function isValidPaidStrategyFile(data) {
+      return data.keys().hasAll([
+        'strategyId', 'fileUrl', 'storagePath', 'fileName', 'fileType',
+        'authorUid', 'createdAt', 'updatedAt'
+      ]) &&
+      data.keys().hasOnly([
+        'strategyId', 'fileUrl', 'storagePath', 'fileName', 'fileType',
+        'authorUid', 'createdAt', 'updatedAt'
+      ]) &&
+      isValidId(data.strategyId) &&
+      data.fileUrl is string && data.fileUrl.size() >= 1 && data.fileUrl.size() <= 2000 &&
+      data.storagePath is string && data.storagePath.size() >= 1 && data.storagePath.size() <= 500 &&
+      data.fileName is string && data.fileName.size() >= 1 && data.fileName.size() <= 260 &&
+      data.fileType in ['pdf', 'image'] &&
+      isValidId(data.authorUid) && data.authorUid == request.auth.uid &&
+      data.createdAt is timestamp &&
+      data.updatedAt is timestamp;
+    }
+
+    function isValidPaymentSettings(data) {
+      return data.keys().hasAll([
+        'upiId', 'qrImageUrl', 'authorUid', 'createdAt', 'updatedAt'
+      ]) &&
+      data.keys().hasOnly([
+        'upiId', 'payeeName', 'qrImageUrl', 'qrStoragePath', 'instructions',
+        'authorUid', 'createdAt', 'updatedAt'
+      ]) &&
+      data.upiId is string && data.upiId.size() >= 1 && data.upiId.size() <= 120 &&
+      (!('payeeName' in data) || (data.payeeName is string && data.payeeName.size() <= 120)) &&
+      data.qrImageUrl is string && data.qrImageUrl.size() <= 2000 &&
+      (!('qrStoragePath' in data) || (data.qrStoragePath is string && data.qrStoragePath.size() <= 500)) &&
+      (!('instructions' in data) || (data.instructions is string && data.instructions.size() <= 1000)) &&
+      isValidId(data.authorUid) && data.authorUid == request.auth.uid &&
+      data.createdAt is timestamp &&
+      data.updatedAt is timestamp;
+    }
+
+    function isValidPaymentRequest(data) {
+      return data.keys().hasAll([
+        'memberUid', 'memberName', 'memberEmail', 'strategyId', 'strategyTitle',
+        'priceInr', 'screenshotUrl', 'screenshotStoragePath', 'status', 'date',
+        'createdAt', 'updatedAt'
+      ]) &&
+      data.keys().hasOnly([
+        'memberUid', 'memberName', 'memberEmail', 'strategyId', 'strategyTitle',
+        'priceInr', 'screenshotUrl', 'screenshotStoragePath', 'transactionId',
+        'status', 'adminNote', 'date', 'createdAt', 'updatedAt'
+      ]) &&
+      isValidId(data.memberUid) &&
+      data.memberName is string && data.memberName.size() >= 1 && data.memberName.size() <= 120 &&
+      data.memberEmail is string && data.memberEmail.size() >= 3 && data.memberEmail.size() <= 200 &&
+      isValidId(data.strategyId) &&
+      data.strategyTitle is string && data.strategyTitle.size() >= 1 && data.strategyTitle.size() <= 200 &&
+      (data.priceInr is int || data.priceInr is float) && data.priceInr >= 0 && data.priceInr <= 10000000 &&
+      data.screenshotUrl is string && data.screenshotUrl.size() >= 1 && data.screenshotUrl.size() <= 2000 &&
+      data.screenshotStoragePath is string && data.screenshotStoragePath.size() >= 1 && data.screenshotStoragePath.size() <= 500 &&
+      (!('transactionId' in data) || (data.transactionId is string && data.transactionId.size() <= 120)) &&
+      data.status in ['pending', 'approved', 'rejected'] &&
+      (!('adminNote' in data) || (data.adminNote is string && data.adminNote.size() <= 500)) &&
+      isDateString(data.date) &&
+      data.createdAt is timestamp &&
+      data.updatedAt is timestamp;
+    }
+
+    function isValidStrategyUnlock(data) {
+      return data.keys().hasAll([
+        'memberUid', 'strategyId', 'requestId', 'fileUrl', 'fileName', 'fileType',
+        'grantedBy', 'createdAt', 'updatedAt'
+      ]) &&
+      data.keys().hasOnly([
+        'memberUid', 'strategyId', 'requestId', 'fileUrl', 'fileName', 'fileType',
+        'grantedBy', 'createdAt', 'updatedAt'
+      ]) &&
+      isValidId(data.memberUid) &&
+      isValidId(data.strategyId) &&
+      isValidId(data.requestId) &&
+      data.fileUrl is string && data.fileUrl.size() >= 1 && data.fileUrl.size() <= 2000 &&
+      data.fileName is string && data.fileName.size() >= 1 && data.fileName.size() <= 260 &&
+      data.fileType in ['pdf', 'image'] &&
+      isValidId(data.grantedBy) && data.grantedBy == request.auth.uid &&
+      data.createdAt is timestamp &&
+      data.updatedAt is timestamp;
+    }
+
+    // --- Collection Rules ---
+
+    match /portal_config/{configId} {
+      allow get: if isVerifiedMember() && isValidId(configId) && (
+        configId == 'primary_admin' ||
+        (configId == 'admin_roster' && isAdmin())
+      );
+      allow list: if false;
+      allow create: if isVerifiedMember() && isValidId(configId) && (
+        (
+          configId == 'primary_admin' &&
+          isValidPrimaryAdminClaim(incoming()) &&
+          incoming().claimedAt == request.time &&
+          !exists(/databases/$(database)/documents/portal_config/primary_admin)
+        ) ||
+        (
+          configId == 'admin_roster' &&
+          isValidAdminRoster(incoming()) &&
+          incoming().activeCount >= 1 &&
+          incoming().updatedAt == request.time &&
+          isAdmin()
+        )
+      );
+      allow update: if isVerifiedMember() && isValidId(configId) &&
+        configId == 'admin_roster' &&
+        isValidAdminRoster(incoming()) &&
+        incoming().activeCount >= 1 &&
+        incoming().updatedAt == request.time &&
+        isAdmin() &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['activeCount', 'updatedByUid', 'updatedAt']);
+      allow delete: if false;
+    }
+
+    match /admin_emails/{emailId} {
+      allow get: if isVerifiedMember() && isValidEmailId(emailId) && (
+        (request.auth.token.email is string && emailId == request.auth.token.email.lower()) ||
+        isAdmin()
+      );
+      allow list: if isVerifiedMember() && isAdmin();
+      allow create: if isVerifiedMember() && isValidEmailId(emailId) && isValidAdminEmailDoc(incoming()) &&
+        incoming().email == emailId &&
+        incoming().status == 'active' &&
+        incoming().addedByUid == request.auth.uid &&
+        incoming().updatedByUid == request.auth.uid &&
+        incoming().createdAt == request.time && incoming().updatedAt == request.time &&
+        isAdmin() &&
+        getAfter(/databases/$(database)/documents/portal_config/admin_roster).data.activeCount >= 1;
+      allow update: if isVerifiedMember() && isValidEmailId(emailId) && isValidAdminEmailDoc(incoming()) &&
+        incoming().email == existing().email &&
+        incoming().addedByUid == existing().addedByUid &&
+        incoming().addedByEmail == existing().addedByEmail &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedByUid == request.auth.uid &&
+        incoming().updatedAt == request.time &&
+        isAdmin() &&
+        incoming().diff(existing()).affectedKeys().hasOnly([
+          'status', 'roleLabel', 'updatedByUid', 'updatedAt'
+        ]) &&
+        (
+          (
+            incoming().status == 'active' &&
+            getAfter(/databases/$(database)/documents/portal_config/admin_roster).data.activeCount >= 1
+          ) ||
+          (
+            incoming().status == 'revoked' &&
+            existing().status == 'active' &&
+            exists(/databases/$(database)/documents/portal_config/admin_roster) &&
+            get(/databases/$(database)/documents/portal_config/admin_roster).data.activeCount >= 2 &&
+            getAfter(/databases/$(database)/documents/portal_config/admin_roster).data.activeCount ==
+              get(/databases/$(database)/documents/portal_config/admin_roster).data.activeCount - 1 &&
+            getAfter(/databases/$(database)/documents/portal_config/admin_roster).data.activeCount >= 1
+          )
+        );
+      allow delete: if false;
+    }
+
+    match /gold_analyses/{analysisId} {
+      allow get: if isVerifiedMember() && isValidId(analysisId) && (existing().visibility == 'members' || isAdmin());
+      allow list: if isVerifiedMember() && existing().visibility == 'members';
+      allow create: if isVerifiedMember() && isValidId(analysisId) && isValidGoldAnalysis(incoming()) &&
+        incoming().createdAt == request.time && incoming().updatedAt == request.time &&
+        isAdmin();
+      allow update: if isVerifiedMember() && isValidId(analysisId) && isValidGoldAnalysis(incoming()) &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().authorUid == existing().authorUid &&
+        incoming().updatedAt == request.time &&
+        isAdmin() &&
+        incoming().diff(existing()).affectedKeys().hasOnly([
+          'title', 'date', 'pair', 'bias', 'timeframe',
+          'entryZone', 'invalidation', 'targets', 'strategyNotes', 'updatedAt'
+        ]);
+      allow delete: if isVerifiedMember() && isValidId(analysisId) && isAdmin();
+    }
+
+    match /strategy_updates/{updateId} {
+      allow get: if isVerifiedMember() && isValidId(updateId) && (existing().visibility == 'members' || isAdmin());
+      allow list: if isVerifiedMember() && existing().visibility == 'members';
+      allow create: if isVerifiedMember() && isValidId(updateId) && isValidStrategyUpdate(incoming()) &&
+        incoming().createdAt == request.time && incoming().updatedAt == request.time &&
+        isAdmin();
+      allow update: if isVerifiedMember() && isValidId(updateId) && isValidStrategyUpdate(incoming()) &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().authorUid == existing().authorUid &&
+        incoming().updatedAt == request.time &&
+        isAdmin() &&
+        incoming().diff(existing()).affectedKeys().hasOnly([
+          'title', 'date', 'category', 'summary', 'details', 'updatedAt'
+        ]);
+      allow delete: if isVerifiedMember() && isValidId(updateId) && isAdmin();
+    }
+
+    match /meetings/{meetingId} {
+      allow get: if isVerifiedMember() && isValidId(meetingId) && (existing().visibility == 'members' || isAdmin());
+      allow list: if isVerifiedMember() && existing().visibility == 'members';
+      allow create: if isVerifiedMember() && isValidId(meetingId) && isValidMeeting(incoming()) &&
+        incoming().createdAt == request.time && incoming().updatedAt == request.time &&
+        isAdmin();
+      allow update: if isVerifiedMember() && isValidId(meetingId) && isValidMeeting(incoming()) &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().authorUid == existing().authorUid &&
+        incoming().updatedAt == request.time &&
+        isAdmin() &&
+        incoming().diff(existing()).affectedKeys().hasOnly([
+          'title', 'date', 'time', 'link', 'status', 'agendaOrRecap', 'recordingLink', 'updatedAt'
+        ]);
+      allow delete: if isVerifiedMember() && isValidId(meetingId) && isAdmin();
+    }
+
+    match /announcements/{announcementId} {
+      allow get: if isVerifiedMember() && isValidId(announcementId) && (existing().visibility == 'members' || isAdmin());
+      allow list: if isVerifiedMember() && existing().visibility == 'members';
+      allow create: if isVerifiedMember() && isValidId(announcementId) && isValidAnnouncement(incoming()) &&
+        incoming().createdAt == request.time && incoming().updatedAt == request.time &&
+        isAdmin();
+      allow update: if isVerifiedMember() && isValidId(announcementId) && isValidAnnouncement(incoming()) &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().authorUid == existing().authorUid &&
+        incoming().updatedAt == request.time &&
+        isAdmin() &&
+        incoming().diff(existing()).affectedKeys().hasOnly([
+          'title', 'date', 'priority', 'body', 'pinned', 'updatedAt'
+        ]);
+      allow delete: if isVerifiedMember() && isValidId(announcementId) && isAdmin();
+    }
+
+    match /portal_notes/{noteId} {
+      allow get: if isVerifiedMember() && isValidId(noteId) && (existing().visibility == 'members' || isAdmin());
+      allow list: if isVerifiedMember() && existing().visibility == 'members';
+      allow create: if isVerifiedMember() && isValidId(noteId) && isValidPortalNote(incoming()) &&
+        incoming().createdAt == request.time && incoming().updatedAt == request.time &&
+        isAdmin();
+      allow update: if isVerifiedMember() && isValidId(noteId) && isValidPortalNote(incoming()) &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().authorUid == existing().authorUid &&
+        incoming().updatedAt == request.time &&
+        isAdmin() &&
+        incoming().diff(existing()).affectedKeys().hasOnly([
+          'noteType', 'title', 'date', 'content',
+          'traderName', 'tradingStyle', 'activeSessions', 'contactChannel', 'riskRules',
+          'updatedAt'
+        ]);
+      allow delete: if isVerifiedMember() && isValidId(noteId) && isAdmin();
+    }
+
+    match /paid_strategies/{strategyId} {
+      allow get: if isVerifiedMember() && isValidId(strategyId) && (existing().visibility == 'members' || isAdmin());
+      allow list: if isVerifiedMember() && existing().visibility == 'members';
+      allow create: if isVerifiedMember() && isValidId(strategyId) && isValidPaidStrategy(incoming()) &&
+        incoming().createdAt == request.time && incoming().updatedAt == request.time &&
+        isAdmin();
+      allow update: if isVerifiedMember() && isValidId(strategyId) && isValidPaidStrategy(incoming()) &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().authorUid == existing().authorUid &&
+        incoming().updatedAt == request.time &&
+        isAdmin() &&
+        incoming().diff(existing()).affectedKeys().hasOnly([
+          'title', 'description', 'priceInr', 'fileName', 'fileType', 'date', 'updatedAt'
+        ]);
+      allow delete: if isVerifiedMember() && isValidId(strategyId) && isAdmin();
+    }
+
+    match /paid_strategy_files/{strategyId} {
+      allow get: if isVerifiedMember() && isValidId(strategyId) && isAdmin();
+      allow list: if false;
+      allow create: if isVerifiedMember() && isValidId(strategyId) && isValidPaidStrategyFile(incoming()) &&
+        incoming().strategyId == strategyId &&
+        incoming().createdAt == request.time && incoming().updatedAt == request.time &&
+        isAdmin() &&
+        existsAfter(/databases/$(database)/documents/paid_strategies/$(strategyId));
+      allow update: if isVerifiedMember() && isValidId(strategyId) && isValidPaidStrategyFile(incoming()) &&
+        incoming().strategyId == existing().strategyId &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().authorUid == existing().authorUid &&
+        incoming().updatedAt == request.time &&
+        isAdmin() &&
+        incoming().diff(existing()).affectedKeys().hasOnly([
+          'fileUrl', 'storagePath', 'fileName', 'fileType', 'updatedAt'
+        ]);
+      allow delete: if isVerifiedMember() && isValidId(strategyId) && isAdmin();
+    }
+
+    match /payment_settings/{settingId} {
+      allow get: if isVerifiedMember() && isValidId(settingId) && settingId == 'upi';
+      allow list: if false;
+      allow create: if isVerifiedMember() && isValidId(settingId) && settingId == 'upi' &&
+        isValidPaymentSettings(incoming()) &&
+        incoming().createdAt == request.time && incoming().updatedAt == request.time &&
+        isAdmin();
+      allow update: if isVerifiedMember() && isValidId(settingId) && settingId == 'upi' &&
+        isValidPaymentSettings(incoming()) &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().authorUid == existing().authorUid &&
+        incoming().updatedAt == request.time &&
+        isAdmin() &&
+        incoming().diff(existing()).affectedKeys().hasOnly([
+          'upiId', 'payeeName', 'qrImageUrl', 'qrStoragePath', 'instructions', 'updatedAt'
+        ]);
+      allow delete: if false;
+    }
+
+    match /payment_requests/{requestId} {
+      allow get: if isVerifiedMember() && isValidId(requestId) &&
+        (existing().memberUid == request.auth.uid || isAdmin());
+      allow list: if isVerifiedMember() &&
+        (existing().memberUid == request.auth.uid || isAdmin());
+      allow create: if isVerifiedMember() && isValidId(requestId) && isValidPaymentRequest(incoming()) &&
+        incoming().memberUid == request.auth.uid &&
+        incoming().status == 'pending' &&
+        incoming().createdAt == request.time && incoming().updatedAt == request.time &&
+        exists(/databases/$(database)/documents/paid_strategies/$(incoming().strategyId));
+      allow update: if isVerifiedMember() && isValidId(requestId) && isValidPaymentRequest(incoming()) &&
+        incoming().memberUid == existing().memberUid &&
+        incoming().memberName == existing().memberName &&
+        incoming().memberEmail == existing().memberEmail &&
+        incoming().strategyId == existing().strategyId &&
+        incoming().strategyTitle == existing().strategyTitle &&
+        incoming().priceInr == existing().priceInr &&
+        incoming().screenshotUrl == existing().screenshotUrl &&
+        incoming().screenshotStoragePath == existing().screenshotStoragePath &&
+        incoming().date == existing().date &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        isAdmin() &&
+        incoming().diff(existing()).affectedKeys().hasOnly([
+          'status', 'adminNote', 'updatedAt'
+        ]);
+      allow delete: if isVerifiedMember() && isValidId(requestId) && isAdmin();
+    }
+
+    match /strategy_unlocks/{unlockId} {
+      allow get: if isVerifiedMember() && isValidId(unlockId) &&
+        (existing().memberUid == request.auth.uid || isAdmin());
+      allow list: if isVerifiedMember() &&
+        (existing().memberUid == request.auth.uid || isAdmin());
+      allow create: if isVerifiedMember() && isValidId(unlockId) && isValidStrategyUnlock(incoming()) &&
+        unlockId == incoming().memberUid + '_' + incoming().strategyId &&
+        incoming().createdAt == request.time && incoming().updatedAt == request.time &&
+        isAdmin() &&
+        getAfter(/databases/$(database)/documents/payment_requests/$(incoming().requestId)).data.status == 'approved' &&
+        getAfter(/databases/$(database)/documents/payment_requests/$(incoming().requestId)).data.memberUid == incoming().memberUid &&
+        getAfter(/databases/$(database)/documents/payment_requests/$(incoming().requestId)).data.strategyId == incoming().strategyId;
+      allow update: if isVerifiedMember() && isValidId(unlockId) && isValidStrategyUnlock(incoming()) &&
+        incoming().memberUid == existing().memberUid &&
+        incoming().strategyId == existing().strategyId &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        isAdmin() &&
+        incoming().diff(existing()).affectedKeys().hasOnly([
+          'requestId', 'fileUrl', 'fileName', 'fileType', 'grantedBy', 'updatedAt'
+        ]);
+      allow delete: if isVerifiedMember() && isValidId(unlockId) && isAdmin();
+    }
+
+    match /admins/{adminId} {
+      allow get: if isVerifiedMember() && isValidId(adminId) && request.auth.uid == adminId;
+      allow list, create, update, delete: if false;
+    }
+  }
+}
